@@ -45,6 +45,47 @@ func TestAccessStanzaMatchSourceANY(t *testing.T) {
 	}
 }
 
+func TestAccessStanzaMatchSourceANYIPv6(t *testing.T) {
+	s := accessStanza{Source: "ANY"}
+	if err := s.parseSourceNets(); err != nil {
+		t.Fatalf("parseSourceNets error: %v", err)
+	}
+
+	for _, ip := range []string{"::1", "2001:db8::1", "fe80::1", "::ffff:192.0.2.1"} {
+		if !s.matchSource(net.ParseIP(ip)) {
+			t.Errorf("ANY should match IPv6 %s", ip)
+		}
+	}
+}
+
+func TestAccessStanzaMatchSourceSingleIPv6(t *testing.T) {
+	s := accessStanza{Source: "2001:db8::1"}
+	if err := s.parseSourceNets(); err != nil {
+		t.Fatalf("parseSourceNets error: %v", err)
+	}
+
+	if !s.matchSource(net.ParseIP("2001:db8::1")) {
+		t.Error("should match exact IPv6 address")
+	}
+	if s.matchSource(net.ParseIP("2001:db8::2")) {
+		t.Error("should not match different IPv6 address")
+	}
+}
+
+func TestAccessStanzaMatchSourceIPv6CIDR(t *testing.T) {
+	s := accessStanza{Source: "2001:db8::/32"}
+	if err := s.parseSourceNets(); err != nil {
+		t.Fatalf("parseSourceNets error: %v", err)
+	}
+
+	if !s.matchSource(net.ParseIP("2001:db8::1")) {
+		t.Error("should match IP within IPv6 CIDR")
+	}
+	if s.matchSource(net.ParseIP("2001:db9::1")) {
+		t.Error("should not match IP outside IPv6 CIDR")
+	}
+}
+
 func TestAccessStanzaMatchSourceSingleIP(t *testing.T) {
 	s := accessStanza{Source: "10.0.0.5"}
 	if err := s.parseSourceNets(); err != nil {

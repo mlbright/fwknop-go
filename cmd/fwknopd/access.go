@@ -143,9 +143,10 @@ func (a *accessStanza) resolve() error {
 // parseSourceNets parses the source field into IP networks.
 func (a *accessStanza) parseSourceNets() error {
 	if strings.ToUpper(a.Source) == "ANY" {
-		// Match any source.
+		// Match any source — include both IPv4 and IPv6 wildcard ranges.
 		_, allV4, _ := net.ParseCIDR("0.0.0.0/0")
-		a.sourceNets = []*net.IPNet{allV4}
+		_, allV6, _ := net.ParseCIDR("::/0")
+		a.sourceNets = []*net.IPNet{allV4, allV6}
 		return nil
 	}
 
@@ -153,8 +154,12 @@ func (a *accessStanza) parseSourceNets() error {
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if !strings.Contains(part, "/") {
-			// Single IP — make it a /32.
-			part += "/32"
+			// Single IP — append /32 for IPv4, /128 for IPv6.
+			if net.ParseIP(part) != nil && strings.Contains(part, ":") {
+				part += "/128"
+			} else {
+				part += "/32"
+			}
 		}
 		_, ipNet, err := net.ParseCIDR(part)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -281,7 +282,7 @@ func buildTemplateContext(msg *fkospa.Message, srcIP string, stanza *accessStanz
 	ip, proto, port := parseAccessMsg(msg.AccessMsg)
 	timeout := effectiveTimeout(msg, stanza)
 
-	if ip == "0.0.0.0" {
+	if parsed := net.ParseIP(ip); parsed != nil && parsed.IsUnspecified() {
 		ip = srcIP
 	}
 	return templateContext{

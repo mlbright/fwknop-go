@@ -153,10 +153,16 @@ func logSPAMessage(logger *spaLogger, msg *fkospa.Message, srcIP net.IP, stanzaN
 }
 
 // containsIP checks if an access message string contains the given IP.
+// IPs are normalized before comparison to handle IPv6 canonical forms.
 func containsIP(accessMsg string, ip string) bool {
 	// Access message format: "IP,proto/port"
-	parts := splitFirst(accessMsg, ",")
-	return parts == ip
+	msgIP := splitFirst(accessMsg, ",")
+	parsedMsg := net.ParseIP(msgIP)
+	parsedSrc := net.ParseIP(ip)
+	if parsedMsg == nil || parsedSrc == nil {
+		return msgIP == ip
+	}
+	return parsedMsg.Equal(parsedSrc)
 }
 
 func splitFirst(s string, sep string) string {

@@ -399,6 +399,54 @@ func TestBuildTemplateContextZeroIPFallback(t *testing.T) {
 	}
 }
 
+func TestBuildTemplateContextIPv6SentinelFallback(t *testing.T) {
+	msg := &fkospa.Message{
+		AccessMsg:     "::,tcp/22",
+		Username:      "bob",
+		Timestamp:     time.Unix(1700000000, 0),
+		ClientTimeout: 30,
+	}
+	stanza := &accessStanza{AccessTimeout: 30, MaxAccessTimeout: 120}
+
+	ctx := buildTemplateContext(msg, "2001:db8::1", stanza)
+
+	if ctx.SourceIP != "2001:db8::1" {
+		t.Errorf("SourceIP = %q, want packet srcIP %q when AccessMsg has ::", ctx.SourceIP, "2001:db8::1")
+	}
+}
+
+func TestBuildTemplateContextIPv6LongFormSentinelFallback(t *testing.T) {
+	msg := &fkospa.Message{
+		AccessMsg:     "0:0:0:0:0:0:0:0,tcp/22",
+		Username:      "bob",
+		Timestamp:     time.Unix(1700000000, 0),
+		ClientTimeout: 30,
+	}
+	stanza := &accessStanza{AccessTimeout: 30, MaxAccessTimeout: 120}
+
+	ctx := buildTemplateContext(msg, "2001:db8::1", stanza)
+
+	if ctx.SourceIP != "2001:db8::1" {
+		t.Errorf("SourceIP = %q, want packet srcIP %q for long-form IPv6 unspecified", ctx.SourceIP, "2001:db8::1")
+	}
+}
+
+func TestBuildTemplateContextInvalidAccessMsgKeepsEmptyIP(t *testing.T) {
+	msg := &fkospa.Message{
+		AccessMsg:     "bad-format",
+		Username:      "bob",
+		Timestamp:     time.Unix(1700000000, 0),
+		ClientTimeout: 30,
+	}
+	stanza := &accessStanza{AccessTimeout: 30, MaxAccessTimeout: 120}
+
+	ctx := buildTemplateContext(msg, "10.0.0.5", stanza)
+
+	if ctx.SourceIP != "" {
+		t.Errorf("SourceIP = %q, want empty for invalid AccessMsg (no fallback)", ctx.SourceIP)
+	}
+}
+
 func TestBuildTemplateContextExplicitIP(t *testing.T) {
 	msg := &fkospa.Message{
 		AccessMsg:     "192.168.1.100,tcp/22",

@@ -650,3 +650,55 @@ func TestIntegrationDigestHMACCombinations(t *testing.T) {
 		})
 	}
 }
+
+func TestContainsIPv6Normalized(t *testing.T) {
+	tests := []struct {
+		accessMsg string
+		srcIP     string
+		want      bool
+	}{
+		{"2001:db8::1,tcp/22", "2001:db8::1", true},
+		{"2001:db8:0:0:0:0:0:1,tcp/22", "2001:db8::1", true}, // non-canonical form
+		{"::1,tcp/22", "::1", true},
+		{"2001:db8::2,tcp/22", "2001:db8::1", false},
+		{"192.168.1.1,tcp/22", "192.168.1.1", true},
+		{"192.168.1.1,tcp/22", "192.168.1.2", false},
+	}
+
+	for _, tc := range tests {
+		got := containsIP(tc.accessMsg, tc.srcIP)
+		if got != tc.want {
+			t.Errorf("containsIP(%q, %q) = %v, want %v", tc.accessMsg, tc.srcIP, got, tc.want)
+		}
+	}
+}
+
+func TestProcessSPAPacketIPv6Source(t *testing.T) {
+	encKey := []byte("testencryptkey!!")
+	hmacKey := []byte("testhmackey!!!!!")
+
+	stanza := accessStanza{Source: "ANY"}
+	stanza.encKey = encKey
+	stanza.hmacKey = hmacKey
+	stanza.hmacType = fkospa.HMACSHA256
+	stanza.encMode = fkospa.EncryptionModeCBC
+	stanza.AccessTimeout = 30
+	stanza.MaxAccessTimeout = 300
+	if err := stanza.parseSourceNets(); err != nil {
+		t.Fatalf("parseSourceNets: %v", err)
+	}
+
+	cfg := &serverConfig{MaxSPAPacketAge: 120, Test: true}
+	replay := newReplayCache(2 * time.Minute)
+	logger := testLogger()
+
+	srcIP := net.ParseIP("2001:db8::1")
+	spaData := makeTestSPA(t, encKey, hmacKey, "2001:db8::1,tcp/22")
+
+	processSPAPacket(cfg, []accessStanza{stanza}, replay, logger, nil, spaData, srcIP)
+
+	digest, _ := fkospa.DigestBase64(fkospa.DigestSHA256, []byte(spaData))
+	if !replay.isDuplicate(digest) {
+		t.Error("IPv6 SPA packet should be accepted by server with ANY source")
+	}
+}
