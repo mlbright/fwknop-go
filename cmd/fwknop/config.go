@@ -22,6 +22,12 @@ const (
 
 var version = "0.1.0"
 
+// flagKeyAliases maps CLI flag names to koanf config keys for cases where the
+// default dash→underscore mapping doesn't match the struct's koanf tag.
+var flagKeyAliases = map[string]string{
+	"key-base64-hmac": "hmac_key_base64",
+}
+
 // clientConfig holds all resolved configuration for the fwknop client.
 type clientConfig struct {
 	// Target
@@ -190,7 +196,10 @@ func loadConfig(args []string) (*clientConfig, error) {
 	// Step 3: Load CLI flags (highest priority, only changed flags).
 	// Map hyphenated flag names to underscored config keys.
 	if err := k.Load(posflag.ProviderWithFlag(flags, ".", k, func(f *pflag.Flag) (string, interface{}) {
-		key := strings.ReplaceAll(f.Name, "-", "_")
+		key, ok := flagKeyAliases[f.Name]
+		if !ok {
+			key = strings.ReplaceAll(f.Name, "-", "_")
+		}
 		switch f.Value.Type() {
 		case "bool":
 			val, _ := flags.GetBool(f.Name)
