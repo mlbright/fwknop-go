@@ -219,6 +219,34 @@ func TestResolveHMACKey(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_KeyBase64HMACFlag(t *testing.T) {
+	// --key-base64-hmac must populate KeyBase64HMAC (koanf tag hmac_key_base64).
+	// Regression test: the default dash→underscore mapping produced
+	// key_base64_hmac, which didn't match the struct tag, so the flag value
+	// was silently dropped.
+	cfg, err := loadConfig([]string{
+		"--no-rc-file",
+		"-D", "example.com",
+		"-A", "tcp/22",
+		"-a", "1.2.3.4",
+		"--key-base64", "dGVzdGtleQ==",
+		"--key-base64-hmac", "aG1hY2tleQ==",
+	})
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.KeyBase64HMAC != "aG1hY2tleQ==" {
+		t.Errorf("KeyBase64HMAC = %q, want %q", cfg.KeyBase64HMAC, "aG1hY2tleQ==")
+	}
+	hmacKey, err := cfg.resolveHMACKey()
+	if err != nil {
+		t.Fatalf("resolveHMACKey: %v", err)
+	}
+	if string(hmacKey) != "hmackey" {
+		t.Errorf("hmac key = %q, want %q", hmacKey, "hmackey")
+	}
+}
+
 func TestParseTimeOffset(t *testing.T) {
 	tests := []struct {
 		input    string
