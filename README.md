@@ -94,6 +94,14 @@ make tidy       # Tidy module dependencies
 make install    # Install binaries to $GOPATH/bin
 ```
 
+To install `fwknopd` as a systemd service (Linux), see
+[Running fwknopd under systemd](#running-fwknopd-under-systemd):
+
+```bash
+sudo make install-systemd     # Install fwknopd binary, systemd unit, and sample configs
+sudo make uninstall-systemd   # Remove the unit and binary
+```
+
 ### Versioning
 
 Each binary (fwknop, fwknopd, fwknop-convert) is versioned independently.
@@ -350,6 +358,100 @@ Each entry defines who can send SPA requests and with what credentials:
 | `require_source_address` | Source IP in packet must match sender |
 | `enable_cmd_exec` | Allow command execution |
 | `cmd_exec_user` | User to run commands as |
+
+### Running fwknopd under systemd
+
+A systemd service unit is provided in [`systemd/fwknopd.service`](systemd/fwknopd.service)
+for running the server as a supervised system daemon on Linux.
+
+#### Install
+
+From the repository root:
+
+```bash
+sudo make install-systemd
+```
+
+This target:
+
+- builds `bin/fwknopd` and installs it to `/usr/local/bin/fwknopd`
+- installs the unit to `/etc/systemd/system/fwknopd.service`
+- creates `/etc/fwknop/` and copies reference configs as `server.yaml.sample`,
+  `access.yaml.sample`, and the `actions/` templates (existing configs are
+  **not** overwritten)
+
+Override the install locations if needed:
+
+```bash
+sudo make install-systemd PREFIX=/usr SYSCONFDIR=/etc/fwknop UNITDIR=/lib/systemd/system
+```
+
+> If you change `PREFIX`, edit the `ExecStart=` path in
+> `/etc/systemd/system/fwknopd.service` to match (it defaults to
+> `/usr/local/bin/fwknopd`).
+
+#### Configure
+
+1. Create the real config files from the installed samples and edit them:
+
+   ```bash
+   sudo cp /etc/fwknop/server.yaml.sample /etc/fwknop/server.yaml
+   sudo cp /etc/fwknop/access.yaml.sample /etc/fwknop/access.yaml
+   ```
+
+2. Generate a key pair and add it to an access stanza in `access.yaml`:
+
+   ```bash
+   fwknop --key-gen
+   ```
+
+   ```yaml
+   - source: "ANY"
+     open_ports:
+       - tcp/22
+     key_base64: "<KEY_BASE64>"
+     hmac_key_base64: "<HMAC_KEY_BASE64>"
+     hmac_digest_type: sha256
+     access_timeout: 30
+   ```
+
+   Keep `access.yaml` readable only by root (`chmod 600`) since it holds keys.
+
+3. Set the firewall `actions` in `server.yaml` for your platform (iptables,
+   nftables, firewalld, or pf). See [Action Configuration](#action-configuration)
+   and the templates in `/etc/fwknop/actions/`.
+
+4. Validate the config before enabling the service:
+
+   ```bash
+   sudo fwknopd --dump-config
+   ```
+
+#### Enable and manage
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now fwknopd     # start now and on boot
+
+sudo systemctl status fwknopd           # check status
+sudo systemctl restart fwknopd          # reload after editing configs
+sudo journalctl -u fwknopd -f           # follow logs
+```
+
+`fwknopd` runs in the foreground under systemd (`Type=simple`), so systemd
+supervises the process directly and restarts it on failure. The unit grants
+`CAP_NET_ADMIN`/`CAP_NET_RAW` for firewall management and applies a set of
+hardening directives — if your firewall action commands fail to apply rules,
+relax the hardening options near the bottom of the unit file.
+
+#### Uninstall
+
+```bash
+sudo make uninstall-systemd
+```
+
+This stops and removes the service and the `/usr/local/bin/fwknopd` binary;
+your configuration under `/etc/fwknop/` is left in place.
 
 ---
 

@@ -10,7 +10,14 @@ GO       := go
 GOFLAGS  ?=
 LDFLAGS  ?= -s -w
 
-.PHONY: all lib client server convert clean test retest vet fmt tidy install help
+# Install locations (override on the command line, e.g. make install-systemd PREFIX=/usr)
+PREFIX     ?= /usr/local
+SYSCONFDIR ?= /etc/fwknop
+UNITDIR    ?= /etc/systemd/system
+INSTALL    ?= install
+
+.PHONY: all lib client server convert clean test retest vet fmt tidy install \
+	install-systemd uninstall-systemd help
 
 all: client server convert  ## Build all binaries
 
@@ -33,6 +40,30 @@ install:  ## Install binaries to $GOPATH/bin
 	$(GO) install $(GOFLAGS) -ldflags "$(LDFLAGS)" ./cmd/fwknop
 	$(GO) install $(GOFLAGS) -ldflags "$(LDFLAGS)" ./cmd/fwknopd
 	$(GO) install $(GOFLAGS) -ldflags "$(LDFLAGS)" ./cmd/fwknop-convert
+
+install-systemd: server  ## Install fwknopd binary, systemd unit, and sample configs
+	$(INSTALL) -d $(DESTDIR)$(PREFIX)/bin
+	$(INSTALL) -m 0755 $(SERVER) $(DESTDIR)$(PREFIX)/bin/fwknopd
+	$(INSTALL) -d $(DESTDIR)$(SYSCONFDIR)/actions
+	$(INSTALL) -m 0644 conf_files/server.yaml $(DESTDIR)$(SYSCONFDIR)/server.yaml.sample
+	$(INSTALL) -m 0600 conf_files/access.yaml $(DESTDIR)$(SYSCONFDIR)/access.yaml.sample
+	$(INSTALL) -m 0644 conf_files/actions/*.yaml $(DESTDIR)$(SYSCONFDIR)/actions/
+	$(INSTALL) -d $(DESTDIR)$(UNITDIR)
+	$(INSTALL) -m 0644 systemd/fwknopd.service $(DESTDIR)$(UNITDIR)/fwknopd.service
+	@echo
+	@echo "Installed fwknopd and the systemd unit."
+	@echo "Next steps:"
+	@echo "  1. cp $(SYSCONFDIR)/server.yaml.sample $(SYSCONFDIR)/server.yaml   # and edit"
+	@echo "  2. cp $(SYSCONFDIR)/access.yaml.sample $(SYSCONFDIR)/access.yaml   # add your keys"
+	@echo "  3. systemctl daemon-reload"
+	@echo "  4. systemctl enable --now fwknopd"
+
+uninstall-systemd:  ## Stop and remove the fwknopd systemd unit and binary
+	-systemctl disable --now fwknopd 2>/dev/null || true
+	rm -f $(DESTDIR)$(UNITDIR)/fwknopd.service
+	rm -f $(DESTDIR)$(PREFIX)/bin/fwknopd
+	-systemctl daemon-reload 2>/dev/null || true
+	@echo "Removed fwknopd unit and binary. Config under $(SYSCONFDIR) was left in place."
 
 TESTPKGS := $(shell $(GO) list ./... | grep -v /examples/)
 
